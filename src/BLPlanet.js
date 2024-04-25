@@ -131,14 +131,14 @@ class App {
         this.scene.add(moon.mesh);
 
         let mercury = new Planet("Mercury",
-            { position: new Vector3(77000, 0.0, 0.0), scale: 2.4397 },
+            { position: new Vector3(-77000, 0.0, 0.0), scale: 2.4397 },
             { mass: 3.3011e23, gravity: 0.0000037, velLin: new Vector3(0.0, 0.0, 0.0004736), velRot: 0.0030256 },
             { diffuse: "../res/textures/brushed_concrete_diff_1k.png", normal: "../res/textures/brushed_concrete_nor_gl_1k.png" });
         this.planets.push(mercury);
         this.scene.add(mercury.mesh);
 
         let venus = new Planet("Venus",
-            { position: new Vector3(40000, 0.0, 0.0), scale: 2.4397 },
+            { position: new Vector3(-40000, 0.0, 0.0), scale: 2.4397 },
             { mass: 4.8675e24, gravity: 0.00000887, velLin: new Vector3(0.0, 0.0, 0.0003502), velRot: 0.00181 },
             { diffuse: "../res/textures/beige_wall_001_diff_1k.png", normal: "../res/textures/beige_wall_001_nor_gl_1k.png" });
         this.planets.push(venus);
@@ -180,7 +180,7 @@ class App {
         this.scene.add(neptune.mesh);
 
         let sun = new Planet("Sun",
-            { position: new Vector3(150530, 0.0, 0.0), scale: 696.3 },
+            { position: new Vector3(-150530, 0.0, 0.0), scale: 696.3 },
             { mass: 1.9885e30, gravity: 0.000274, velLin: new Vector3(0.0), velRot: 1.997 }, // 274 0.000274
             { emissive: true }); 
         this.planets.push(sun);
@@ -196,7 +196,6 @@ class App {
         // Date
         let date = this.datePanel = document.createElement("div");
         date.innerHTML = "Date: " + this.date;
-        date.style.fontFamily = "sans-serif";
         date.style.color = "white";
         date.style.position = "absolute";
         date.style.top = 20 + "px";
@@ -206,7 +205,6 @@ class App {
         // Planet Info
         let info = this.planetPanel = document.createElement("div");
         info.innerHTML = "Planet Info < ";
-        info.style.fontFamily = "sans-serif";
         info.style.color = "white";
         info.style.position = "absolute";
         info.style.top = 100 + "px";

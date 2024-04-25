@@ -2,12 +2,12 @@ import * as THREE from "three";
 import { Vector3, Quaternion, Matrix4 } from "three";
 
 // &nbsp; (Regular space) &ensp; (Two spaces gap) &emsp; (Four spaces gap)
-const tab1 = "&emsp;";
-const tab3 = "&emsp;&emsp;&emsp;";
-const tab5 = "&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;";
-const tab6 = "&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&nbsp;";
-const tab7 = "&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&nbsp;";
-const tab11 = "&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&ensp;&nbsp;";
+const tab26 = "&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;";
+const tab15 = "&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;";
+const tab19 = "&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;";
+const tab9 = "&emsp;&emsp;&emsp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;";
+const tab2 = "&ensp;&ensp;";
+const tab14 = "&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;";
 
 class Planet {
 
@@ -38,12 +38,12 @@ class Planet {
             this.velocityOrbital = options.velOrb || 1;                     // in Mm/s
 
             this.traits = "<br />" + 
-            "<br /> Mass:" + tab11 + options.mass + " kg" +
-            "<br /> Surface Gravity:" + tab6 + (options.gravity * 1000000).toFixed(2) + " m/s^2" +
-            "<br /> Mean Radius:" + tab7 + (transforms.scale * 1000) + " km" +
-            "<br /> Average Orbital Speed:" + tab3 + ((options.velLin.x + options.velLin.y + options.velLin.z) * 100000).toFixed(2) + " km/s" +
-            "<br /> Equatorial Rotation Velocity:" + tab1 + options.velRot + " km/s" +
-            "<br /><br /> Current Velocity:" + tab5;
+            "<br /> Mass:" + tab26 + options.mass + " kg" +
+            "<br /> Surface Gravity:" + tab15 + (options.gravity * 1000000).toFixed(2) + " m/s^2" +
+            "<br /> Mean Radius:" + tab19 + (transforms.scale * 1000) + " km" +
+            "<br /> Average Orbital Speed:" + tab9 + ((options.velLin.x + options.velLin.y + options.velLin.z) * 100000).toFixed(2) + " km/s" +
+            "<br /> Equatorial Rotation Velocity:" + tab2 + options.velRot + " km/s" +
+            "<br /><br /> Current Velocity:" + tab14;
         }
 
         // assets
