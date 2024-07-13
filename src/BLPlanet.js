@@ -5,17 +5,21 @@ import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
-import { GUI } from "https://cdn.skypack.dev/lil-gui";
+import { HDRJPGLoader } from "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.0/dist/decode.js" //'@monogrid/gainmap-js';
+import { GUI } from "https://cdn.skypack.dev/lil-gui";  
+import { ShaderManager } from './shaderManager.js'
 import { Planet } from "./Planet.js";
 
 class App {
 
     constructor() {
         // time attributes
-        this.clock = new THREE.Clock();
         this.date = 0; // "1/1/0 00:00"
-        this.timeStep = 0.01; // 0.005
-        this.maxDelta = 0.02;
+        this.t = 0.0;
+        this.dt = 0.01; // 1/60 = 0.016 seconds, therefore our simulation dt is less than a render rate of 60fps
+        this.currentTime = performance.now() / 1000.0; // in seconds
+        this.frameTime = 0.0;
+        this.accumulator = 0.0;
 
         // scene attributes
         this.scene = null;
@@ -30,6 +34,8 @@ class App {
         this.SELECTED;
         this.FOLLOWING;
 
+        this.planetScale = 1.0;
+
         this.raycaster = new THREE.Raycaster();
         this.pointer = new THREE.Vector2();
 
@@ -40,7 +46,7 @@ class App {
         this.planetsMeshes = [];
     }
 
-    init() {
+    async init() {
 
         let scene = this.scene = new THREE.Scene();
         scene.background = new THREE.Color( 0x1f1f1f1f );
@@ -61,12 +67,12 @@ class App {
         document.body.appendChild( renderer.domElement );
 
         // Camera
-        let camera = this.camera = new THREE.PerspectiveCamera( 45, window.innerWidth/window.innerHeight, 0.1, 1000000 );
+        let camera = this.camera = new THREE.PerspectiveCamera( 45, window.innerWidth/window.innerHeight, 0.1, 10000000 );
         let controls = this.controls = new OrbitControls( camera, renderer.domElement );
         controls.object.position.set( 0.0, 100, 300 );
         controls.target.set( 0.0, 0.0, 0.0 );
         controls.minDistance = 1;
-        controls.maxDistance = 100000;
+        controls.maxDistance = 5000000;
 
         // Render passes
         let renderScene = new RenderPass(scene, camera);
@@ -80,27 +86,50 @@ class App {
 
         this.composer = new EffectComposer( renderer );
         this.composer.addPass( renderScene );
-        this.composer.addPass( bloomPass );
+        //this.composer.addPass( bloomPass ); // if we do this, pbr materials don't seem to work
         this.composer.addPass( outputPass );
 
         // Lights
         let hemiLight = new THREE.HemisphereLight( 0xffffff, 0xffffff, 0.05 );
-        scene.add(hemiLight);
+        //scene.add(hemiLight); // delete?
+
+        // HDR JPG Background
+        let hdrJpg = new HDRJPGLoader( renderer ).load( "res/textures/8k_stars_milky_way.jpg", () => {
+            let hdrJpgEquirectangularMap = hdrJpg.renderTarget.texture;
+            hdrJpgEquirectangularMap.mapping = THREE.EquirectangularReflectionMapping;
+            hdrJpgEquirectangularMap.needsUpdate = true;
+
+            scene.environment = hdrJpgEquirectangularMap;
+            scene.background = hdrJpgEquirectangularMap;
+            this.background = hdrJpgEquirectangularMap;
+
+            hdrJpg.dispose();
+        });
+
+        // Load shaders
+        this.shaderManager = new ShaderManager("res/shaders/");
+        let SM = this.shaderManager;
+        let promise = SM.loadFromFile("basic.vs");
+        promise = await promise;
+        promise = SM.loadFromFile("sun.fs");
+        promise = await promise;
 
         // Add planets here
         this.initSolarSystem();
 
         // Initially follow the Earth
-        this.FOLLOWING = this.planetsMeshes.find(p => p.name === "Earth");
+        this.FOLLOWING = this.planetsMeshes.find(p => p.name === "Sun");
         controls.target = this.FOLLOWING.position;
         controls.update();
 
-        // Call the loop
         this.initGUI();
 
+        // Start the simulation loop
         this.animate();
         document.querySelector("#loading").style.display = "none";
 
+        // Add events
+        setInterval(() => {document.querySelector("#fps > a").innerHTML = (1.0/this.frameTime).toFixed(2) + " fps";}, 100) // in ms, update each 0.1s
         window.addEventListener( "pointermove",  this.onPointerMove.bind(this) );
         window.addEventListener( "click", this.onClick.bind(this) );
         window.addEventListener( "dblclick", this.onDBClick.bind(this) );
@@ -109,13 +138,16 @@ class App {
     }
 
     initSolarSystem() {
-
+        
         let earth = new Planet("Earth",
             { position: new Vector3(0.0), scale: 6.371 },
             { mass: 5.97219e24, gravity: 0.00000980665, velLin: new Vector3(0.0, 0.0, 0.0002978), velRot: 0.4651 }, // 0.00000980665 9.80665 0.02978
-            { diffuse: "../res/textures/coast_land_rocks_01_diff_1k.png", normal: "../res/textures/coast_land_rocks_01_nor_gl_1k.png" });
+            { diffuse: "../res/textures/2k_earth_daymap.jpg", normal: "../res/textures/2k_earth_normal_map.jpg", 
+              shadow: "../res/textures/2k_earth_nightmap.jpg", bump: "../res/textures/2k_earth_bump.jpg",
+              clouds: "../res/textures/2k_earth_clouds.jpg", oceans: "../res/textures/2k_earth_specular_map.jpg" });
         this.planets.push(earth);
         this.scene.add(earth.mesh);
+        this.scene.add(earth.group);
 
         let ball2 = new Planet("Aux_Ball",
             { position: new Vector3(-15.0) },
@@ -126,63 +158,64 @@ class App {
         let moon = new Planet("Moon",
             { position: new Vector3(384.4, 0.0, 0.0), scale: 1.7374 },
             { mass: 7.34767309e22, gravity: 0.000001622, velLin: new Vector3(0.0, 0.0, 0.001022), velRot: 0.004627 }, //
-            { diffuse: "../res/textures/rough_plasterbrick_05_diff_1k.png", normal: "../res/textures/rough_plasterbrick_05_nor_gl_1k.png"});
+            { diffuse: "../res/textures/2k_moon.jpg" });
         this.planets.push(moon);
         this.scene.add(moon.mesh);
 
         let mercury = new Planet("Mercury",
             { position: new Vector3(-77000, 0.0, 0.0), scale: 2.4397 },
             { mass: 3.3011e23, gravity: 0.0000037, velLin: new Vector3(0.0, 0.0, 0.0004736), velRot: 0.0030256 },
-            { diffuse: "../res/textures/brushed_concrete_diff_1k.png", normal: "../res/textures/brushed_concrete_nor_gl_1k.png" });
+            { diffuse: "../res/textures/2k_mercury.jpg" });
         this.planets.push(mercury);
         this.scene.add(mercury.mesh);
 
         let venus = new Planet("Venus",
             { position: new Vector3(-40000, 0.0, 0.0), scale: 2.4397 },
             { mass: 4.8675e24, gravity: 0.00000887, velLin: new Vector3(0.0, 0.0, 0.0003502), velRot: 0.00181 },
-            { diffuse: "../res/textures/beige_wall_001_diff_1k.png", normal: "../res/textures/beige_wall_001_nor_gl_1k.png" });
+            { diffuse: "../res/textures/2k_venus_surface.jpg" });
         this.planets.push(venus);
         this.scene.add(venus.mesh);
 
         let mars = new Planet("Mars",
             { position: new Vector3(225000, 0.0, 0.0), scale: 2.4397 },
             { mass: 6.4171e23, gravity: 0.00000372076, velLin: new Vector3(0.0, 0.0, 0.0002407), velRot: 0.241 },
-            { diffuse: "../res/textures/rust_coarse_01_diff_1k.png", normal: "../res/textures/rust_coarse_01_nor_gl_1k.png" });
+            { diffuse: "../res/textures/2k_mars.jpg" });
         this.planets.push(mars);
         this.scene.add(mars.mesh);
 
         let jupiter = new Planet("Jupiter",
             { position: new Vector3(714000, 0.0, 0.0), scale: 2.4397 },
             { mass: 1.8982e27, gravity: 0.00002479, velLin: new Vector3(0.0, 0.0, 0.0001307), velRot: 12.6 },
-            { diffuse: "../res/textures/rusty_metal_sheet_diff_1k.png", normal: "../res/textures/rusty_metal_sheet_nor_gl_1k.png" });
+            { diffuse: "../res/textures/2k_jupiter.jpg" });
         this.planets.push(jupiter);
         this.scene.add(jupiter.mesh);
 
         let saturn = new Planet("Saturn",
             { position: new Vector3(1543100, 0.0, 0.0), scale: 2.4397 },
             { mass: 5.6834e26, gravity: 0.00001044, velLin: new Vector3(0.0, 0.0, 0.0000968), velRot: 9.87 },
-            { diffuse: "../res/textures/yellow_plaster_diff_1k.png", normal: "../res/textures/yellow_plaster_nor_gl_1k.png" });
+            { diffuse: "../res/textures/2k_saturn.jpg" });
         this.planets.push(saturn);
         this.scene.add(saturn.mesh);
 
         let uranus = new Planet("Uranus",
             { position: new Vector3(2900000, 0.0, 0.0), scale: 2.4397 },
             { mass: 8.6812e25, gravity: 0.00000869, velLin: new Vector3(0.0, 0.0, 0.000068), velRot: 2.59 },
-            { diffuse: "../res/textures/asphalt_04_diff_1k.png", normal: "../res/textures/asphalt_04_nor_gl_1k.png" });
+            { diffuse: "../res/textures/2k_uranus.jpg" });
         this.planets.push(uranus);
         this.scene.add(uranus.mesh);
 
         let neptune = new Planet("Neptune",
             { position: new Vector3(4590900, 0.0, 0.0), scale: 2.4397 },
             { mass: 1.02409e26, gravity: 0.00001115, velLin: new Vector3(0.0, 0.0, 0.0000543), velRot: 2.68 },
-            { diffuse: "../res/textures/aerial_asphalt_01_diff_1k.png", normal: "../res/textures/aerial_asphalt_01_nor_gl_1k.png" });
+            { diffuse: "../res/textures/2k_neptune.jpg" });
         this.planets.push(neptune);
         this.scene.add(neptune.mesh);
 
         let sun = new Planet("Sun",
             { position: new Vector3(-150530, 0.0, 0.0), scale: 696.3 },
             { mass: 1.9885e30, gravity: 0.000274, velLin: new Vector3(0.0), velRot: 1.997 }, // 274 0.000274
-            { emissive: true }); 
+            { diffuse: "../res/textures/2k_sun.jpg", emissive: true });
+        sun.loadShaders(this.shaderManager, "basic.vs", "sun.fs", { u_time: {type: "f", value: 0} });
         this.planets.push(sun);
         this.scene.add(sun.mesh);
         this.scene.add(sun.light);
@@ -232,24 +265,27 @@ class App {
         // this.scene.add(pathObject);
 
         // Right GUI panel
-        let gui = new GUI().title("Big Little Planet Controls");
+        let gui = this.gui = new GUI().title("Big Little Planet Controls");
 
         let options = this.options = {
             grid: true,
-            space: false,
+            space: true,
             orbitDebug: false,
 
             timeMuliplier: 1, // Hours: 3600, Minute: 60, Second: 1
             timeSet: 0,
 
-            follow: "Earth",
+            follow: this.FOLLOWING.name,
+            scale: 1.0,
         };
 
         let flagsFolder = gui.addFolder( 'Flags' ).close();
         flagsFolder.add(options, "grid").name("Show Grid").listen().onChange( (value) => {
             this.scene.getObjectByName("GridHelper").visible = value;
         } );
-        flagsFolder.add(options, "space").name("Show Space");
+        flagsFolder.add(options, "space").name("Show Space").listen().onChange( (value) => {
+            this.scene.background = value ? this.background : new THREE.Color( 0x1f1f1f1f );
+        } );
         flagsFolder.add(options, "orbitDebug").name("Show Orbit");
 
         let renderOptions = {
@@ -263,31 +299,43 @@ class App {
         renderFolder.add( renderOptions, 'bloomStr', 0, 3 ).name("Bloom Strength").onChange( (val) => { this.bloomPass.strength = val; });
         renderFolder.add( renderOptions, 'bloomRad', 0, 1 ).name("Bloom Radius").onChange( (val) => { this.bloomPass.radius = val; });
 
-        gui.add(options, "timeMuliplier", {Year: 31536000, Month: 2592000, Day: 86400, Hour: 3600, Minute: 60, Second: 1, Stop: 0,
-            Minus_Second: -1, Minus_Minute: -60, Minus_Hour: -3600, Minus_Day: -86400, Minus_Month: -2592000, Minus_Year: -31536000}).name("Time Passed in 1s");
+        gui.add(options, "timeMuliplier", {Year: 31536000, Month: 2592000, Day: 86400, Hour: 3600, Minute: 60, Second: 1, Stop: 0}).name("Time Passed in 1s");
 
         gui.add(options, "follow", {Mercury: "Mercury", Venus: "Venus", Earth: "Earth", Mars: "Mars", Jupiter: "Jupiter", Saturn: "Saturn", Uranus: "Uranus", Neptune: "Neptune", Sun: "Sun", Moon: "Moon"}).name("Fast Travel").onChange( (name) => {
             this.FOLLOWING = this.planetsMeshes.find(p => p.name === name);
             this.controls.target = this.FOLLOWING.position;
         } );
+
+        gui.add(options, "scale", 1, 1000).name("Planets Scale").onChange( (val) => { 
+            for (let i = 0; i < this.planetsMeshes.length; i++) {
+                if (this.planets[i].name != "Sun") {
+                    this.planetsMeshes[i].geometry.dispose();
+                    this.planetsMeshes[i].geometry = new THREE.SphereGeometry( val * this.planets[i].radius, 32, 16 );
+                }
+            }
+        });
     }
 
     animate() {
 
         requestAnimationFrame( this.animate.bind(this) );
-        let delta = this.clock.getDelta();
 
-        // Determine a static time step
-        let maxIters = Math.min(delta, this.maxDelta);
-        if (maxIters >= 0) {
-            for (let iDelta = 0; iDelta <= maxIters; iDelta += this.timeStep) {
-                this.update(this.timeStep * this.options.timeMuliplier);
-            }
-        } else {
-            for (let iDelta = 0; iDelta <= -maxIters; iDelta += this.timeStep) {
-                this.update(-this.timeStep * this.options.timeMuliplier);
-            }
+        let newTime = performance.now() / 1000.0;
+        this.frameTime = newTime - this.currentTime;
+        this.currentTime = newTime;
+
+        this.accumulator += this.frameTime;
+
+        while ( this.accumulator >= this.dt )
+        {
+            this.update( this.dt * this.options.timeMuliplier );
+            this.accumulator -= this.dt;
+            this.t += this.dt;
         }
+
+        // update time from uniforms (better to just hardcode it)
+        this.planetsMeshes.find(p => p.name === "Sun").material.uniforms.u_time.value = newTime;
+        this.planetsMeshes.find(p => p.name === "Sun").material.uniforms.u_time.needsUpdate = true;
 
         this.render();
     }
@@ -320,12 +368,12 @@ class App {
         const intersects = this.raycaster.intersectObjects( this.planetsMeshes );
         if ( intersects.length > 0 ) {
             if ( this.INTERSECTED != intersects[0].object ) {
-                if ( this.INTERSECTED ) this.INTERSECTED.material.color.setHex( this.INTERSECTED.currentHex );
+                // if ( this.INTERSECTED ) this.INTERSECTED.material.color.setHex( this.INTERSECTED.currentHex ); // todo
                 this.INTERSECTED = intersects[0].object;
 
                 // what we do with the intersected object
-                this.INTERSECTED.currentHex = this.INTERSECTED.material.color.getHex();
-                this.INTERSECTED.material.color.setHex( 0xff0000 );
+                // this.INTERSECTED.currentHex = this.INTERSECTED.material.color.getHex(); // todo
+                // this.INTERSECTED.material.color.setHex( 0xff0000 ); // todo
                 this.planetInfo.innerHTML = this.INTERSECTED.name + " >";
                 this.planetPanel.style.visibility = "visible"; // show info panel
             }
@@ -338,7 +386,7 @@ class App {
         } 
         else {
             if ( this.INTERSECTED ) {
-                this.INTERSECTED.material.color.setHex( this.INTERSECTED.currentHex );
+                // this.INTERSECTED.material.color.setHex( this.INTERSECTED.currentHex ); // todo
             }
             if ( this.SELECTED ) {
                 this.planetInfo.innerHTML = this.SELECTED.name + " >" + this.SELECTED.traits + (this.SELECTED.linearVelocity.length() * 100000).toFixed(2) + " km/s";
@@ -462,7 +510,7 @@ class App {
 
         if (this.INTERSECTED != null) {
             // selected objects not only have the name but the full planet info
-            let selPlanet = this.planets.find(p => p.name === this.INTERSECTED.name );
+            let selPlanet = this.planets.find(p => p.name === this.INTERSECTED.name);
             this.SELECTED = this.SELECTED == selPlanet ? null : selPlanet;
             this.planetInfo.innerHTML = this.INTERSECTED.name + " >";
         }
@@ -476,6 +524,7 @@ class App {
             if (this.FOLLOWING) {
                 if (this.FOLLOWING != this.INTERSECTED) {
                     this.FOLLOWING = this.INTERSECTED;
+                    this.gui.valueOf("follow").children[3].setValue(this.INTERSECTED.name);
                     // move camera to selected object
                     this.camera.position.copy(this.INTERSECTED.position).add(new Vector3(50.0, 50.0, 100.0));
                 } else {
@@ -484,6 +533,7 @@ class App {
                 }
             } else {
                 this.FOLLOWING = this.INTERSECTED;
+                this.gui.valueOf("follow").children[3].setValue(this.INTERSECTED.name);
                 // move camera to selected object
                 this.camera.position.copy(this.INTERSECTED.position).add(new Vector3(50.0, 50.0, 100.0));
             }
@@ -491,7 +541,11 @@ class App {
     }
 
     onWheel( event ) {
-        this.zoom += event.deltaY * 0.1;
+
+        // compute distance from cam to planet range goes from [30, 100000]
+        let dist_factor = new Vector3().subVectors(this.FOLLOWING.position, this.camera.position).length() / 20;
+
+        this.zoom += event.deltaY * 0.1 * dist_factor;
         // Restrict zoom
         this.zoom = Math.min(Math.max(1.0, this.zoom), 100000);
     }
