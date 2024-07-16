@@ -144,23 +144,26 @@ float fbm(vec4 p)
 
 vec3 brightnessToColor(float b)
 {
-	b *= 0.5;
-	return vec3(b, b*b*b, b*b*b*b*b) * 1.5;
+	b += 0.2;
+	b *= 0.8 + 0.7;
+	return vec3(b, b*b*b, b*b*b*b*b);
 }
 
 void main() {
 	//vec3 color = texture2D( u_textures[1], vUv ).rgb;
 
-	vec4 p = vec4(vec4(v_position*3.0, u_time/50.0));
+	vec4 p1 = vec4(vec4(v_position*3.0, u_time/50.0));
+	vec4 p2 = vec4(vec4(v_position*3.0, u_time/50.0));
 	// float v = snoise(vec4(v_position*4.0, u_time/5.0));
-	float noise_value = fbm(p);
 	
-	float spots = max(snoise(p*0.5), 0.);
+	float noise_value = fbm(p1);
+	float spots = max(snoise(p2), 0.);
 	
-	 vec3 color = vec3(noise_value);
-	//vec3 color = brightnessToColor(noise_value);
+	float color_value = noise_value * mix(1.0, spots, 0.95);
+	color_value = clamp(color_value, 0., 1.);
+	vec3 color = brightnessToColor(color_value);
 
-	gl_FragColor = vec4(0.0,0.0,0.0,1.0);//vec4(color, 1.0);
-	// gl_FragColor *= mix(1., spots, 0.5);
-	gl_FragColor *= spots*0.1;
+	gl_FragColor = vec4(color, 1.0);
+	// gl_FragColor = vec4(vec3(noise_value), 1.0);
+	// gl_FragColor = vec4(vec3(spots), 1.0);
 }

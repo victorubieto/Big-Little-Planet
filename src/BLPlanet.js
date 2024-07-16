@@ -8,7 +8,11 @@ import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { HDRJPGLoader } from "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.0/dist/decode.js" //'@monogrid/gainmap-js';
 import { GUI } from "https://cdn.skypack.dev/lil-gui";  
 import { ShaderManager } from './shaderManager.js'
-import { Planet } from "./Planet.js";
+
+// import { Planet } from "./Planet.js";
+import { Planet, Moon } from "./CelestialBody.js";
+import { Earth } from "./Earth.js";
+import { Sun } from "./Sun.js";
 
 class App {
 
@@ -42,8 +46,11 @@ class App {
         // constants
         this.G = 6.6743e-29; // Gravitational constant (Mm^3 kg^-1 s^-2)
 
-        this.planets = [];
-        this.planetsMeshes = [];
+        // this.planets = [];
+        // this.planetsMeshes = [];
+
+        this.celestialBodies = []
+        this.celestialBodyMeshes = []
     }
 
     async init() {
@@ -91,10 +98,10 @@ class App {
 
         // Lights
         let hemiLight = new THREE.HemisphereLight( 0xffffff, 0xffffff, 0.05 );
-        //scene.add(hemiLight); // delete?
+        scene.add(hemiLight); // delete?
 
         // HDR JPG Background
-        let hdrJpg = new HDRJPGLoader( renderer ).load( "res/textures/8k_stars_milky_way.jpg", () => {
+        let hdrJpg = new HDRJPGLoader( renderer ).load( "https://upload.wikimedia.org/wikipedia/commons/8/85/Solarsystemscope_texture_8k_stars_milky_way.jpg", () => {
             let hdrJpgEquirectangularMap = hdrJpg.renderTarget.texture;
             hdrJpgEquirectangularMap.mapping = THREE.EquirectangularReflectionMapping;
             hdrJpgEquirectangularMap.needsUpdate = true;
@@ -113,12 +120,16 @@ class App {
         promise = await promise;
         promise = SM.loadFromFile("sun.fs");
         promise = await promise;
+        promise = SM.loadFromFile("sunAround.vs");
+        promise = await promise;
+        promise = SM.loadFromFile("sunAround.fs");
+        promise = await promise;
 
         // Add planets here
         this.initSolarSystem();
 
         // Initially follow the Earth
-        this.FOLLOWING = this.planetsMeshes.find(p => p.name === "Sun");
+        this.FOLLOWING = this.celestialBodyMeshes.find(p => p.name === "Sun");
         controls.target = this.FOLLOWING.position;
         controls.update();
 
@@ -138,6 +149,32 @@ class App {
     }
 
     initSolarSystem() {
+
+        this.celestialBodies = [];
+
+        let sun = new Sun(
+            { position: new Vector3(0.0, 0.0, 0.0), scale: 696.3 },
+            { mass: 1.9885e30, gravity: 0.000274, velLin: new Vector3(0.0), velRot: 1.997 }, // 274 0.000274
+        );
+        sun.createCustomMaterial(this.shaderManager, "basic.vs", "sun.fs", { u_time: {type: "f", value: 0} });
+        this.celestialBodies.push(sun);
+        this.scene.add(sun.light);
+        this.scene.add(sun.group);
+
+        let earth = new Earth(
+            { position: new Vector3(150530.0, 0.0, 0.0), scale: 6.371 },
+            { mass: 5.97219e24, gravity: 0.00000980665, velLin: new Vector3(0.0, 0.0, 0.0002978), velRot: 0.4651 }, // 0.00000980665 9.80665 0.02978
+            { diffuse: "../res/textures/2k_earth_daymap.jpg", normal: "../res/textures/2k_earth_normal_map.jpg", 
+              shadow: "../res/textures/2k_earth_nightmap.jpg", bump: "../res/textures/2k_earth_bump.jpg",
+              clouds: "../res/textures/2k_earth_clouds.jpg", oceans: "../res/textures/2k_earth_specular_map.jpg" });
+        this.celestialBodies.push(earth);
+        this.scene.add(earth.mesh);
+
+        // Create list of the mesh of the celestial bodies (to help the raycast)
+        this.celestialBodyMeshes = this.celestialBodies.map( el => {return el.mesh;} );
+    }
+
+    initSolarSystem2() {
         
         let earth = new Planet("Earth",
             { position: new Vector3(0.0), scale: 6.371 },
@@ -302,15 +339,15 @@ class App {
         gui.add(options, "timeMuliplier", {Year: 31536000, Month: 2592000, Day: 86400, Hour: 3600, Minute: 60, Second: 1, Stop: 0}).name("Time Passed in 1s");
 
         gui.add(options, "follow", {Mercury: "Mercury", Venus: "Venus", Earth: "Earth", Mars: "Mars", Jupiter: "Jupiter", Saturn: "Saturn", Uranus: "Uranus", Neptune: "Neptune", Sun: "Sun", Moon: "Moon"}).name("Fast Travel").onChange( (name) => {
-            this.FOLLOWING = this.planetsMeshes.find(p => p.name === name);
+            this.FOLLOWING = this.celestialBodyMeshes.find(p => p.name === name);
             this.controls.target = this.FOLLOWING.position;
         } );
 
         gui.add(options, "scale", 1, 1000).name("Planets Scale").onChange( (val) => { 
-            for (let i = 0; i < this.planetsMeshes.length; i++) {
-                if (this.planets[i].name != "Sun") {
-                    this.planetsMeshes[i].geometry.dispose();
-                    this.planetsMeshes[i].geometry = new THREE.SphereGeometry( val * this.planets[i].radius, 32, 16 );
+            for (let i = 0; i < this.celestialBodyMeshes.length; i++) {
+                if (this.celestialBodies[i].name != "Sun") {
+                    this.celestialBodyMeshes[i].geometry.dispose();
+                    this.celestialBodyMeshes[i].geometry = new THREE.SphereGeometry( val * this.celestialBodies[i].radius, 32, 16 );
                 }
             }
         });
@@ -334,8 +371,8 @@ class App {
         }
 
         // update time from uniforms (better to just hardcode it)
-        this.planetsMeshes.find(p => p.name === "Sun").material.uniforms.u_time.value = newTime;
-        this.planetsMeshes.find(p => p.name === "Sun").material.uniforms.u_time.needsUpdate = true;
+        // this.celestialBodyMeshes.find(p => p.name === "Sun").material.uniforms.u_time.value = newTime;
+        // this.celestialBodyMeshes.find(p => p.name === "Sun").material.uniforms.u_time.needsUpdate = true;
 
         this.render();
     }
@@ -365,7 +402,7 @@ class App {
         this.raycaster.setFromCamera( this.pointer, this.camera );
 
         // calculate objects intersecting the picking ray
-        const intersects = this.raycaster.intersectObjects( this.planetsMeshes );
+        const intersects = this.raycaster.intersectObjects( this.celestialBodyMeshes );
         if ( intersects.length > 0 ) {
             if ( this.INTERSECTED != intersects[0].object ) {
                 // if ( this.INTERSECTED ) this.INTERSECTED.material.color.setHex( this.INTERSECTED.currentHex ); // todo
@@ -457,12 +494,12 @@ class App {
     updatePhysics(dt) {
 
         // Apply impulses
-        for (let i = 0; i < this.planets.length; i++) {
-            let planetA = this.planets[i];
+        for (let i = 0; i < this.celestialBodies.length; i++) {
+            let planetA = this.celestialBodies[i];
 
             // Gravity applied each pair of planets
-            for (let j = i+1; j < this.planets.length; j++) {
-                let planetB = this.planets[j];
+            for (let j = i+1; j < this.celestialBodies.length; j++) {
+                let planetB = this.celestialBodies[j];
                 let dirAB = new Vector3().subVectors(planetB.position, planetA.position).normalize();
                 let dirBA = new Vector3().copy(dirAB).negate();
 
@@ -493,9 +530,9 @@ class App {
         }
 
         // Update position
-        for (let i = 0; i < this.planets.length; i++) {
-            this.planets[i].update( dt );
-            //this.planets[i].updateOrbitVelocityDir();
+        for (let i = 0; i < this.celestialBodies.length; i++) {
+            this.celestialBodies[i].update( dt );
+            //this.celestialBodies[i].updateOrbitVelocityDir();
         }
     }
 
@@ -510,7 +547,7 @@ class App {
 
         if (this.INTERSECTED != null) {
             // selected objects not only have the name but the full planet info
-            let selPlanet = this.planets.find(p => p.name === this.INTERSECTED.name);
+            let selPlanet = this.celestialBodies.find(p => p.name === this.INTERSECTED.name);
             this.SELECTED = this.SELECTED == selPlanet ? null : selPlanet;
             this.planetInfo.innerHTML = this.INTERSECTED.name + " >";
         }
