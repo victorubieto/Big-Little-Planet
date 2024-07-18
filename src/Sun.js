@@ -12,9 +12,6 @@ class Sun extends Star {
 
     createCustomMaterial(shaderManager, vertShader, fragShader, uniforms) {
         this.uniforms = {
-            u_textures: {
-                // value: [],
-            },
             ...uniforms,
         };
 
@@ -37,9 +34,9 @@ class Sun extends Star {
                     u_bboxMax: {
                         value: aroundGeometry.boundingBox.max,
                     },
-                    ...uniforms,
                 },
                 side: THREE.BackSide,
+                transparent: true,
                 vertexShader: shaderManager.get("sunAround.vs"),
                 fragmentShader: shaderManager.get("sunAround.fs"),
             } )
@@ -54,6 +51,19 @@ class Sun extends Star {
         this.group = new THREE.Group();
         this.group.add(this.mesh);
         this.group.add(this.meshAround);
+    }
+
+    updateUniforms(time) {
+        this.mesh.material.uniforms.u_time.value = time;
+        this.mesh.material.uniforms.u_time.needsUpdate = true;
+
+        if (true) // to do: only do when their are modified
+        {
+            this.meshAround.material.uniforms.u_bboxMin.value = this.meshAround.geometry.boundingBox.min;
+            this.meshAround.material.uniforms.u_bboxMax.value = this.meshAround.geometry.boundingBox.max;
+            this.meshAround.material.uniforms.u_bboxMin.needsUpdate = true;
+            this.meshAround.material.uniforms.u_bboxMax.needsUpdate = true;
+        }
     }
 }
 

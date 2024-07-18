@@ -5,11 +5,11 @@ import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+
 import { HDRJPGLoader } from "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.0/dist/decode.js" //'@monogrid/gainmap-js';
-import { GUI } from "https://cdn.skypack.dev/lil-gui";  
+import { GUI } from "https://cdn.skypack.dev/lil-gui";
 import { ShaderManager } from './shaderManager.js'
 
-// import { Planet } from "./Planet.js";
 import { Planet, Moon } from "./CelestialBody.js";
 import { Earth } from "./Earth.js";
 import { Sun } from "./Sun.js";
@@ -57,11 +57,6 @@ class App {
 
         let scene = this.scene = new THREE.Scene();
         scene.background = new THREE.Color( 0x1f1f1f1f );
-        // let gridHelper = new THREE.GridHelper( 100, 10 );   // square = 10 Mm^2
-        // gridHelper.name = "GridHelper";
-        // scene.add( gridHelper );
-        //let gridHelper2 = new THREE.GridHelper( 100000, 10000 );   // square = 10000 Mm^2
-        //scene.add( gridHelper2 );
 
         // Renderer
         let renderer = this.renderer = new THREE.WebGLRenderer( { antialias: true } );
@@ -154,12 +149,26 @@ class App {
 
         let sun = new Sun(
             { position: new Vector3(0.0, 0.0, 0.0), scale: 696.3 },
-            { mass: 1.9885e30, gravity: 0.000274, velLin: new Vector3(0.0), velRot: 1.997 }, // 274 0.000274
+            { mass: 1.9885e30, gravity: 0.000274, velLin: new Vector3(0.0), velRot: 1.997 },
         );
         sun.createCustomMaterial(this.shaderManager, "basic.vs", "sun.fs", { u_time: {type: "f", value: 0} });
         this.celestialBodies.push(sun);
-        this.scene.add(sun.light);
         this.scene.add(sun.group);
+        this.scene.add(sun.light);
+
+        let mercury = new Planet("Mercury",
+            { position: new Vector3(58000.0, 0.0, 0.0), scale: 2.4397 },
+            { mass: 3.3011e23, gravity: 0.0000037, velLin: new Vector3(0.0, 0.0, 0.0004736), velRot: 0.0030256 },
+            { diffuse: "../res/textures/2k_mercury.jpg" });
+        this.celestialBodies.push(mercury);
+        this.scene.add(mercury.mesh);
+
+        let venus = new Planet("Venus",
+            { position: new Vector3(108000.2, 0.0, 0.0), scale: 2.4397 },
+            { mass: 4.8675e24, gravity: 0.00000887, velLin: new Vector3(0.0, 0.0, 0.0003502), velRot: 0.00181 },
+            { diffuse: "../res/textures/2k_venus_surface.jpg" });
+        this.celestialBodies.push(venus);
+        this.scene.add(venus.mesh);
 
         let earth = new Earth(
             { position: new Vector3(150530.0, 0.0, 0.0), scale: 6.371 },
@@ -170,95 +179,51 @@ class App {
         this.celestialBodies.push(earth);
         this.scene.add(earth.mesh);
 
-        // Create list of the mesh of the celestial bodies (to help the raycast)
-        this.celestialBodyMeshes = this.celestialBodies.map( el => {return el.mesh;} );
-    }
-
-    initSolarSystem2() {
-        
-        let earth = new Planet("Earth",
-            { position: new Vector3(0.0), scale: 6.371 },
-            { mass: 5.97219e24, gravity: 0.00000980665, velLin: new Vector3(0.0, 0.0, 0.0002978), velRot: 0.4651 }, // 0.00000980665 9.80665 0.02978
-            { diffuse: "../res/textures/2k_earth_daymap.jpg", normal: "../res/textures/2k_earth_normal_map.jpg", 
-              shadow: "../res/textures/2k_earth_nightmap.jpg", bump: "../res/textures/2k_earth_bump.jpg",
-              clouds: "../res/textures/2k_earth_clouds.jpg", oceans: "../res/textures/2k_earth_specular_map.jpg" });
-        this.planets.push(earth);
-        this.scene.add(earth.mesh);
-        this.scene.add(earth.group);
-
-        let ball2 = new Planet("Aux_Ball",
-            { position: new Vector3(-15.0) },
-            { mass: 1e22, gravity: 0.0, velLin: new Vector3(0.0, 0.0, 0.005) });
-        this.planets.push(ball2);
-        this.scene.add(ball2.mesh);
-
-        let moon = new Planet("Moon",
+        let moon = new Moon("Moon", earth,
             { position: new Vector3(384.4, 0.0, 0.0), scale: 1.7374 },
-            { mass: 7.34767309e22, gravity: 0.000001622, velLin: new Vector3(0.0, 0.0, 0.001022), velRot: 0.004627 }, //
+            { mass: 7.34767309e22, gravity: 0.000001622, velLin: new Vector3(0.0, 0.0, 0.001022), velRot: 0.004627 },
             { diffuse: "../res/textures/2k_moon.jpg" });
-        this.planets.push(moon);
+        this.celestialBodies.push(moon);
         this.scene.add(moon.mesh);
 
-        let mercury = new Planet("Mercury",
-            { position: new Vector3(-77000, 0.0, 0.0), scale: 2.4397 },
-            { mass: 3.3011e23, gravity: 0.0000037, velLin: new Vector3(0.0, 0.0, 0.0004736), velRot: 0.0030256 },
-            { diffuse: "../res/textures/2k_mercury.jpg" });
-        this.planets.push(mercury);
-        this.scene.add(mercury.mesh);
-
-        let venus = new Planet("Venus",
-            { position: new Vector3(-40000, 0.0, 0.0), scale: 2.4397 },
-            { mass: 4.8675e24, gravity: 0.00000887, velLin: new Vector3(0.0, 0.0, 0.0003502), velRot: 0.00181 },
-            { diffuse: "../res/textures/2k_venus_surface.jpg" });
-        this.planets.push(venus);
-        this.scene.add(venus.mesh);
-
         let mars = new Planet("Mars",
-            { position: new Vector3(225000, 0.0, 0.0), scale: 2.4397 },
+            { position: new Vector3(227900.0, 0.0, 0.0), scale: 2.4397 },
             { mass: 6.4171e23, gravity: 0.00000372076, velLin: new Vector3(0.0, 0.0, 0.0002407), velRot: 0.241 },
             { diffuse: "../res/textures/2k_mars.jpg" });
-        this.planets.push(mars);
+        this.celestialBodies.push(mars);
         this.scene.add(mars.mesh);
 
         let jupiter = new Planet("Jupiter",
-            { position: new Vector3(714000, 0.0, 0.0), scale: 2.4397 },
+            { position: new Vector3(778500.0, 0.0, 0.0), scale: 2.4397 },
             { mass: 1.8982e27, gravity: 0.00002479, velLin: new Vector3(0.0, 0.0, 0.0001307), velRot: 12.6 },
             { diffuse: "../res/textures/2k_jupiter.jpg" });
-        this.planets.push(jupiter);
+        this.celestialBodies.push(jupiter);
         this.scene.add(jupiter.mesh);
 
         let saturn = new Planet("Saturn",
-            { position: new Vector3(1543100, 0.0, 0.0), scale: 2.4397 },
+            { position: new Vector3(1433000.0, 0.0, 0.0), scale: 2.4397 },
             { mass: 5.6834e26, gravity: 0.00001044, velLin: new Vector3(0.0, 0.0, 0.0000968), velRot: 9.87 },
             { diffuse: "../res/textures/2k_saturn.jpg" });
-        this.planets.push(saturn);
+        this.celestialBodies.push(saturn);
         this.scene.add(saturn.mesh);
 
         let uranus = new Planet("Uranus",
-            { position: new Vector3(2900000, 0.0, 0.0), scale: 2.4397 },
+            { position: new Vector3(2871000.0, 0.0, 0.0), scale: 2.4397 },
             { mass: 8.6812e25, gravity: 0.00000869, velLin: new Vector3(0.0, 0.0, 0.000068), velRot: 2.59 },
             { diffuse: "../res/textures/2k_uranus.jpg" });
-        this.planets.push(uranus);
+        this.celestialBodies.push(uranus);
         this.scene.add(uranus.mesh);
 
         let neptune = new Planet("Neptune",
-            { position: new Vector3(4590900, 0.0, 0.0), scale: 2.4397 },
+            { position: new Vector3(4495000.0, 0.0, 0.0), scale: 2.4397 },
             { mass: 1.02409e26, gravity: 0.00001115, velLin: new Vector3(0.0, 0.0, 0.0000543), velRot: 2.68 },
             { diffuse: "../res/textures/2k_neptune.jpg" });
-        this.planets.push(neptune);
+        this.celestialBodies.push(neptune);
         this.scene.add(neptune.mesh);
 
-        let sun = new Planet("Sun",
-            { position: new Vector3(-150530, 0.0, 0.0), scale: 696.3 },
-            { mass: 1.9885e30, gravity: 0.000274, velLin: new Vector3(0.0), velRot: 1.997 }, // 274 0.000274
-            { diffuse: "../res/textures/2k_sun.jpg", emissive: true });
-        sun.loadShaders(this.shaderManager, "basic.vs", "sun.fs", { u_time: {type: "f", value: 0} });
-        this.planets.push(sun);
-        this.scene.add(sun.mesh);
-        this.scene.add(sun.light);
 
-        // Create list of the mesh of the planets (to help the raycast)
-        this.planetsMeshes = this.planets.map( el => {return el.mesh;} );
+        // Create list of the mesh of the celestial bodies (to help the raycast)
+        this.celestialBodyMeshes = this.celestialBodies.map( el => {return el.mesh;} );
     }
 
     initGUI() {
@@ -338,7 +303,7 @@ class App {
 
         gui.add(options, "timeMuliplier", {Year: 31536000, Month: 2592000, Day: 86400, Hour: 3600, Minute: 60, Second: 1, Stop: 0}).name("Time Passed in 1s");
 
-        gui.add(options, "follow", {Mercury: "Mercury", Venus: "Venus", Earth: "Earth", Mars: "Mars", Jupiter: "Jupiter", Saturn: "Saturn", Uranus: "Uranus", Neptune: "Neptune", Sun: "Sun", Moon: "Moon"}).name("Fast Travel").onChange( (name) => {
+        gui.add(options, "follow", {Sun: "Sun", Mercury: "Mercury", Venus: "Venus", Earth: "Earth", Moon: "Moon", Mars: "Mars", Jupiter: "Jupiter", Saturn: "Saturn", Uranus: "Uranus", Neptune: "Neptune"}).name("Fast Travel").onChange( (name) => {
             this.FOLLOWING = this.celestialBodyMeshes.find(p => p.name === name);
             this.controls.target = this.FOLLOWING.position;
         } );
@@ -370,9 +335,8 @@ class App {
             this.t += this.dt;
         }
 
-        // update time from uniforms (better to just hardcode it)
-        // this.celestialBodyMeshes.find(p => p.name === "Sun").material.uniforms.u_time.value = newTime;
-        // this.celestialBodyMeshes.find(p => p.name === "Sun").material.uniforms.u_time.needsUpdate = true;
+        // update uniforms in shaders
+        this.celestialBodies.forEach((el) => el.updateUniforms(newTime));
 
         this.render();
     }
@@ -389,6 +353,18 @@ class App {
 
         /* UPDATE CAMERA */
         this.controls.update();
+
+        /* UPDATE RAYCASTER */
+        this.updateRayCaster();
+
+        /* UPDATE DATE */
+        this.updateDate();
+        
+        /* UPDATE PHYSICS */
+        this.updatePhysics(dt);
+    }
+
+    updateRayCaster() {
 
         // move camera along the following planet
         if (this.FOLLOWING) {
@@ -432,8 +408,10 @@ class App {
             }
             this.INTERSECTED = null;
         }
+    }
 
-        /* UPDATE DATE */
+    updateDate(dt) {
+
         let stopped = false;
         if (this.datePanel) {
 
@@ -486,9 +464,6 @@ class App {
             this.datePanel.innerHTML += ((minutes < 10) ? ":0" : ":") + Math.floor(minutes);
             this.datePanel.innerHTML += ((seconds < 10) ? ":0" : ":") + Math.floor(seconds); // this.date = "1/1/0 00:00:00"
         }
-
-        /* UPDATE PHYSICS */
-        this.updatePhysics(dt);
     }
 
     updatePhysics(dt) {
@@ -502,17 +477,6 @@ class App {
                 let planetB = this.celestialBodies[j];
                 let dirAB = new Vector3().subVectors(planetB.position, planetA.position).normalize();
                 let dirBA = new Vector3().copy(dirAB).negate();
-
-                // Book implementation
-                // let gravityVec = new Vector3().copy(dirAB).multiplyScalar(planetB.gravity);
-                // let massA = 1.0 / planetA.invMass;
-                // let impulseGravity = new Vector3().copy(gravityVec).multiplyScalar( massA * dt );
-                // planetA.applyImpulse( impulseGravity );
-
-                // gravityVec = new Vector3().copy(dirBA).multiplyScalar(planetA.gravity);
-                // let massB = 1.0 / planetB.invMass;
-                // impulseGravity = new Vector3().copy(gravityVec).multiplyScalar( massB * dt );
-                // planetB.applyImpulse( impulseGravity );
 
                 // My implementation
                 let r = planetA.position.distanceTo( planetB.position );

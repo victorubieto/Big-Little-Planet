@@ -1,26 +1,25 @@
 varying vec2 v_uv;
 varying vec3 v_position;
 varying vec3 v_worldPosition;
+varying vec3 v_normal;
+varying vec3 v_worldNormal;
 
 varying float radial;
 
 uniform float u_time;
-// uniform sampler2D u_textures[6];
 
 vec3 brightnessToColor(float b)
 {
-	b += 0.2;
-	b *= 0.8 + 0.7;
+	b *= 0.3 + 0.3;
 	return vec3(b, b*b*b, b*b*b*b*b);
 }
 
 void main() {
-	//vec3 color = texture2D( u_textures[1], vUv ).rgb;
 
-	//vec3 color = vec3(v_position.z, 0.0, 0.0);
+	vec3 view_dir = normalize(v_worldPosition - cameraPosition);
+	float gradient = pow(abs(dot(view_dir, v_worldNormal)), 2.0) * 2.3;
 	
-	vec3 color1 = vec3(0.0);
-	vec3 color2 = vec3(1.0,0.0,0.0);
-	vec3 color = mix(color1, color2, radial);
-	gl_FragColor = vec4(color, 1.0);
+	vec3 color = brightnessToColor(gradient);
+
+	gl_FragColor = vec4(color, gradient);
 }
